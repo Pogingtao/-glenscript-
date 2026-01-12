@@ -1,5 +1,5 @@
--- Rayfield GUI Template (Created by glenxdd | Mobile Optimized)
--- Updated: 2026 Smart Logic | 100% Strength | 1TAPPIN MO SILAA!!
+-- Rayfield GUI Template (Created by glenxdd | Ultimate ESP + Aim)
+-- Updated: 2026 Smart Logic | 1TAPPIN MO SILAA!!
 
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
@@ -9,6 +9,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
@@ -18,22 +19,26 @@ local LocalPlayer = Players.LocalPlayer
 local State = {
     -- Aim
     AimbotEnabled = false,
-    Sensitivity = 1, -- Default 1.0 = 100% Strength (Instant)
+    Sensitivity = 1, -- 1.0 = Instant Lock
     TargetPart = "Head",
     SmartTeamCheck = true,
     WallCheck = true,
     FOVSize = 150,
+    ShowFOV = false,
     
     -- Visuals
-    ESPEnabled = false,
     HighlightESP = true,
     BoxESP = false,
     NameESP = false,
+    TracerESP = false,
+    DistanceESP = false,
+    HealthESP = false,
     ESPTeamCheck = true,
     
     -- Colors
     EnemyColor = Color3.fromRGB(255, 0, 0),
-    TeamColor = Color3.fromRGB(0, 255, 0)
+    TeamColor = Color3.fromRGB(0, 255, 0),
+    TracerOrigin = "Bottom" -- Bottom, Mouse, Center
 }
 
 -- =========================
@@ -43,11 +48,11 @@ local FOVCircle = Drawing.new("Circle")
 FOVCircle.Color = Color3.fromRGB(255, 255, 255)
 FOVCircle.Thickness = 1
 FOVCircle.Filled = false
-FOVCircle.Transparency = 0.6
+FOVCircle.Transparency = 0.8
 FOVCircle.NumSides = 60
 FOVCircle.Visible = false
 
-local DrawingStorage = {}
+local ESP_Cache = {}
 
 -- =========================
 -- ROBUST LOGIC FUNCTIONS (2026 PATCH)
@@ -57,20 +62,14 @@ local DrawingStorage = {}
 local function IsTeammate(player)
     if not player or not LocalPlayer then return false end
     
-    -- 1. Neutral Flag Check (FFA Games)
-    if LocalPlayer.Neutral or player.Neutral then
-        return false 
-    end
+    -- 1. Neutral Flag (FFA)
+    if LocalPlayer.Neutral or player.Neutral then return false end
 
-    -- 2. Team Color Check
-    if LocalPlayer.TeamColor == player.TeamColor then
-        return true
-    end
+    -- 2. Team Color
+    if LocalPlayer.TeamColor == player.TeamColor then return true end
 
-    -- 3. Team Object Check
-    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
-        return true
-    end
+    -- 3. Team Object
+    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then return true end
 
     return false
 end
@@ -97,12 +96,308 @@ local function IsVisible(targetPart)
 end
 
 -- =========================
+-- ESP DRAWING FUNCTIONS
+-- =========================
+local function CreateDrawing(Type, Props)
+    local Obj = Drawing.new(Type)
+    for k, v in pairs(Props) do Obj[k] = v end
+    return Obj
+end
+
+local function AddESP(player)
+    if ESP_Cache[player] then return end
+    
+    ESP_Cache[player] = {
+        BoxOutline = CreateDrawing("Square", {Color = Color3.new(0,0,0), Thickness = 3, Filled = false}),
+        Box = CreateDrawing("Square", {Color = Color3.new(1,1,1), Thickness = 1, Filled = false}),
+        
+        Name = CreateDrawing("Text", {Color = Color3.new(1,1,1), Size = 13, Center = true, Outline = true, Font = 2}),
+        Distance = CreateDrawing("Text", {Color = Color3.new(1,1,1), Size = 12, Center = true, Outline = true, Font = 2}),
+        
+        HealthBarOutline = CreateDrawing("Square", {Color = Color3.new(0,0,0), Thickness = 1, Filled = true}),
+        HealthBar = CreateDrawing("Square", {Color = Color3.new(0,1,0), Thickness = 1, Filled = true}),
+        
+        Tracer = CreateDrawing("Line", {Color = Color3.new(1,1,1), Thickness = 1, Transparency = 1})
+    }
+end
+
+local function RemoveESP(player)
+    if ESP_Cache[player] then
+        for _, v in pairs(ESP_Cache[player]) do v:Remove() end
+        ESP_Cache[player] = nil
+    end
+end
+
+-- =========================
 -- AIMBOT TARGETING
 -- =========================
 local function GetTarget()
     local Closest = nil
     local MaxDist = math.huge
     local Center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and IsValid(v) then
+            if State.SmartTeamCheck and IsTeammate(v) then continue end
+
+            local Part = v.Character:FindFirstChild(State.TargetPart)
+            if Part then
+                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+                if OnScreen then
+                    local DistToCenter = (Vector2.new(ScreenPos.X, ScreenPos.Y) - Center).Magnitude
+                    if DistToCenter < State.FOVSize then
+                        if IsVisible(Part) then
+                            if DistToCenter < MaxDist then
+                                MaxDist = DistToCenter
+                                Closest = Part
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return Closest
+end
+
+-- =========================
+-- UI CONSTRUCTION
+-- =========================
+local Window = Rayfield:CreateWindow({
+    Name = "👑 Created by glenxdd 👑",
+    LoadingTitle = "Universal Mobile",
+    LoadingSubtitle = "1TAPPIN MO SILAA!!",
+    ConfigurationSaving = {Enabled = true, FolderName = "GlenxddSettings", FileName = "Config"},
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Combat ⚔️", 4483362458)
+local VisualTab = Window:CreateTab("Visuals 👁️", 4483362458)
+
+-- COMBAT TAB
+MainTab:CreateSection("Aimbot Settings 🎯")
+
+MainTab:CreateToggle({
+    Name = "Active Aimbot 🔫",
+    CurrentValue = false,
+    Callback = function(v) State.AimbotEnabled = v end
+})
+
+MainTab:CreateSlider({
+    Name = "Aim Strength (%) 💪",
+    Range = {1, 100}, 
+    Increment = 1,
+    Suffix = "%",
+    CurrentValue = 100,
+    Callback = function(v) State.Sensitivity = v / 100 end
+})
+
+MainTab:CreateToggle({
+    Name = "Smart Team Check 🛡️",
+    CurrentValue = true,
+    Callback = function(v) State.SmartTeamCheck = v end
+})
+
+MainTab:CreateToggle({
+    Name = "Wall Check 🧱",
+    CurrentValue = true,
+    Callback = function(v) State.WallCheck = v end
+})
+
+MainTab:CreateSection("FOV Settings ⭕")
+
+MainTab:CreateSlider({
+    Name = "FOV Size",
+    Range = {50, 600},
+    Increment = 10,
+    CurrentValue = 150,
+    Callback = function(v) State.FOVSize = v end
+})
+
+MainTab:CreateToggle({
+    Name = "Show FOV Circle",
+    CurrentValue = false,
+    Callback = function(v) State.ShowFOV = v end
+})
+
+-- VISUALS TAB
+VisualTab:CreateSection("Highlights (Chams) ✨")
+VisualTab:CreateToggle({ Name = "Player Highlights 🌟", CurrentValue = true, Callback = function(v) State.HighlightESP = v end })
+VisualTab:CreateColorPicker({ Name = "Enemy Color 🔴", Color = Color3.fromRGB(255, 0, 0), Callback = function(c) State.EnemyColor = c end })
+
+VisualTab:CreateSection("Detailed ESP 📝")
+VisualTab:CreateToggle({ Name = "Box ESP 📦", CurrentValue = false, Callback = function(v) State.BoxESP = v end })
+VisualTab:CreateToggle({ Name = "Name ESP 🏷️", CurrentValue = false, Callback = function(v) State.NameESP = v end })
+VisualTab:CreateToggle({ Name = "Health ESP 💚", CurrentValue = false, Callback = function(v) State.HealthESP = v end })
+VisualTab:CreateToggle({ Name = "Tracer ESP 📏", CurrentValue = false, Callback = function(v) State.TracerESP = v end })
+VisualTab:CreateToggle({ Name = "Distance ESP (Studs) 👣", CurrentValue = false, Callback = function(v) State.DistanceESP = v end })
+VisualTab:CreateToggle({ Name = "Hide Teammates 🚫", CurrentValue = true, Callback = function(v) State.ESPTeamCheck = v end })
+
+-- =========================
+-- MAIN RENDER LOOP
+-- =========================
+RunService.RenderStepped:Connect(function()
+    -- 1. FOV Update (Centered)
+    local CenterScreen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Position = CenterScreen
+    FOVCircle.Radius = State.FOVSize
+    FOVCircle.Visible = State.ShowFOV
+
+    -- 2. Aimbot Execution
+    if State.AimbotEnabled then
+        local Target = GetTarget()
+        if Target then
+            local CurrentCF = Camera.CFrame
+            local GoalCF = CFrame.new(CurrentCF.Position, Target.Position)
+            
+            if State.Sensitivity >= 1 then
+                Camera.CFrame = GoalCF
+            else
+                Camera.CFrame = CurrentCF:Lerp(GoalCF, State.Sensitivity)
+            end
+        end
+    end
+
+    -- 3. Visuals & ESP
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            if char and IsValid(player) then
+                local isAlly = IsTeammate(player)
+                local Color = isAlly and State.TeamColor or State.EnemyColor
+                
+                -- Highlight ESP
+                local showHighlight = State.HighlightESP
+                if State.ESPTeamCheck and isAlly then showHighlight = false end
+
+                if showHighlight then
+                    local hl = char:FindFirstChild("GlenxddHighlight")
+                    if not hl then
+                        hl = Instance.new("Highlight", char)
+                        hl.Name = "GlenxddHighlight"
+                        hl.Adornee = char
+                        hl.FillTransparency = 0.5
+                        hl.OutlineTransparency = 0
+                    end
+                    hl.FillColor = Color
+                    hl.OutlineColor = Color3.new(1,1,1)
+                    hl.Enabled = true
+                else
+                    if char:FindFirstChild("GlenxddHighlight") then char.GlenxddHighlight:Destroy() end
+                end
+
+                -- Drawing ESP Logic
+                if not ESP_Cache[player] then AddESP(player) end
+                local d = ESP_Cache[player]
+                
+                local shouldDraw = (State.BoxESP or State.NameESP or State.TracerESP or State.DistanceESP or State.HealthESP)
+                if State.ESPTeamCheck and isAlly then shouldDraw = false end
+
+                local HRP = char:FindFirstChild("HumanoidRootPart")
+                local Head = char:FindFirstChild("Head")
+
+                if shouldDraw and HRP and Head then
+                    local Vec, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
+                    local HeadVec = Camera:WorldToViewportPoint(Head.Position + Vector3.new(0, 0.5, 0))
+                    local LegVec = Camera:WorldToViewportPoint(HRP.Position - Vector3.new(0, 3, 0))
+                    local Distance = (Camera.CFrame.Position - HRP.Position).Magnitude
+                    
+                    if OnScreen then
+                        local H = LegVec.Y - HeadVec.Y
+                        local W = H / 1.5
+                        local BoxPos = Vector2.new(Vec.X - W/2, HeadVec.Y)
+
+                        -- Box
+                        if State.BoxESP then
+                            d.BoxOutline.Visible = true
+                            d.BoxOutline.Size = Vector2.new(W, H)
+                            d.BoxOutline.Position = BoxPos
+
+                            d.Box.Visible = true
+                            d.Box.Size = Vector2.new(W, H)
+                            d.Box.Position = BoxPos
+                            d.Box.Color = Color
+                        else
+                            d.Box.Visible = false; d.BoxOutline.Visible = false
+                        end
+
+                        -- Health Bar
+                        if State.HealthESP then
+                            local Hum = char:FindFirstChild("Humanoid")
+                            local HealthPct = Hum and (Hum.Health / Hum.MaxHealth) or 0
+                            local BarHeight = H * HealthPct
+                            
+                            d.HealthBarOutline.Visible = true
+                            d.HealthBarOutline.Size = Vector2.new(4, H + 2)
+                            d.HealthBarOutline.Position = Vector2.new(BoxPos.X - 6, BoxPos.Y - 1)
+                            
+                            d.HealthBar.Visible = true
+                            d.HealthBar.Size = Vector2.new(2, BarHeight)
+                            d.HealthBar.Position = Vector2.new(BoxPos.X - 5, BoxPos.Y + (H - BarHeight))
+                            d.HealthBar.Color = Color3.fromRGB(255 - (255 * HealthPct), 255 * HealthPct, 0)
+                        else
+                            d.HealthBar.Visible = false; d.HealthBarOutline.Visible = false
+                        end
+
+                        -- Name
+                        if State.NameESP then
+                            d.Name.Visible = true
+                            d.Name.Text = player.DisplayName
+                            d.Name.Position = Vector2.new(Vec.X, HeadVec.Y - 18)
+                            d.Name.Color = Color
+                        else
+                            d.Name.Visible = false
+                        end
+
+                        -- Distance
+                        if State.DistanceESP then
+                            d.Distance.Visible = true
+                            d.Distance.Text = "[" .. math.floor(Distance) .. " Studs]"
+                            d.Distance.Position = Vector2.new(Vec.X, LegVec.Y + 2)
+                            d.Distance.Color = Color3.new(1,1,1)
+                        else
+                            d.Distance.Visible = false
+                        end
+
+                        -- Tracer
+                        if State.TracerESP then
+                            d.Tracer.Visible = true
+                            d.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y) -- Bottom Middle
+                            d.Tracer.To = Vector2.new(Vec.X, LegVec.Y)
+                            d.Tracer.Color = Color
+                        else
+                            d.Tracer.Visible = false
+                        end
+                    else
+                        -- Offscreen
+                        for _, v in pairs(d) do v.Visible = false end
+                    end
+                else
+                    for _, v in pairs(d) do v.Visible = false end
+                end
+            else
+                if ESP_Cache[player] then
+                    for _, v in pairs(ESP_Cache[player]) do v.Visible = false end
+                end
+            end
+        end
+    end
+end)
+
+-- =========================
+-- CLEANUP & INIT
+-- =========================
+for _, v in pairs(Players:GetPlayers()) do 
+    if v ~= LocalPlayer then AddESP(v) end 
+end
+Players.PlayerAdded:Connect(AddESP)
+Players.PlayerRemoving:Connect(RemoveESP)
+
+Rayfield:Notify({
+    Title = "Welcome glenxdd! 👑",
+    Content = "1TAPPIN MO SILAA!! 💀🔥",
+    Duration = 5
+})    local Center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
     for _, v in pairs(Players:GetPlayers()) do
         if v ~= LocalPlayer and IsValid(v) then
