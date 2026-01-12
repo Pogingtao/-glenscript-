@@ -1,0 +1,355 @@
+-- Rayfield GUI Template (Created by glenxdd | Mobile Optimized)
+-- Updated: 2026 Smart Logic | 100% Strength | 1TAPPIN MO SILAA!!
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+-- =========================
+-- SERVICES
+-- =========================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- =========================
+-- STATE SETTINGS
+-- =========================
+local State = {
+    -- Aim
+    AimbotEnabled = false,
+    Sensitivity = 1, -- Default 1.0 = 100% Strength (Instant)
+    TargetPart = "Head",
+    SmartTeamCheck = true,
+    WallCheck = true,
+    FOVSize = 150,
+    
+    -- Visuals
+    ESPEnabled = false,
+    HighlightESP = true,
+    BoxESP = false,
+    NameESP = false,
+    ESPTeamCheck = true,
+    
+    -- Colors
+    EnemyColor = Color3.fromRGB(255, 0, 0),
+    TeamColor = Color3.fromRGB(0, 255, 0)
+}
+
+-- =========================
+-- DRAWING OBJECTS
+-- =========================
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Thickness = 1
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.6
+FOVCircle.NumSides = 60
+FOVCircle.Visible = false
+
+local DrawingStorage = {}
+
+-- =========================
+-- ROBUST LOGIC FUNCTIONS (2026 PATCH)
+-- =========================
+
+-- Smart Team Check
+local function IsTeammate(player)
+    if not player or not LocalPlayer then return false end
+    
+    -- 1. Neutral Flag Check (FFA Games)
+    if LocalPlayer.Neutral or player.Neutral then
+        return false 
+    end
+
+    -- 2. Team Color Check
+    if LocalPlayer.TeamColor == player.TeamColor then
+        return true
+    end
+
+    -- 3. Team Object Check
+    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
+        return true
+    end
+
+    return false
+end
+
+local function IsValid(player)
+    return player 
+    and player.Character 
+    and player.Character:FindFirstChild("Humanoid") 
+    and player.Character.Humanoid.Health > 0 
+    and player.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function IsVisible(targetPart)
+    if not State.WallCheck then return true end
+    local Origin = Camera.CFrame.Position
+    local Direction = (targetPart.Position - Origin).Unit * (targetPart.Position - Origin).Magnitude
+    local Params = RaycastParams.new()
+    Params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    Params.FilterType = Enum.RaycastFilterType.Exclude
+    Params.IgnoreWater = true
+    
+    local Result = Workspace:Raycast(Origin, Direction, Params)
+    return Result == nil or Result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+-- =========================
+-- AIMBOT TARGETING
+-- =========================
+local function GetTarget()
+    local Closest = nil
+    local MaxDist = math.huge
+    local Center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and IsValid(v) then
+            
+            if State.SmartTeamCheck and IsTeammate(v) then 
+                continue 
+            end
+
+            local Part = v.Character:FindFirstChild(State.TargetPart)
+            if Part then
+                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+                if OnScreen then
+                    local DistToCenter = (Vector2.new(ScreenPos.X, ScreenPos.Y) - Center).Magnitude
+                    
+                    if DistToCenter < State.FOVSize then
+                        if IsVisible(Part) then
+                            if DistToCenter < MaxDist then
+                                MaxDist = DistToCenter
+                                Closest = Part
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return Closest
+end
+
+-- =========================
+-- UI CONSTRUCTION
+-- =========================
+local Window = Rayfield:CreateWindow({
+    Name = "👑 Created by glenxdd 👑",
+    LoadingTitle = "Universal Mobile",
+    LoadingSubtitle = "1TAPPIN SYSTEM",
+    ConfigurationSaving = {Enabled = true, FolderName = "GlenxddSettings", FileName = "Config"},
+    KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Combat ⚔️", 4483362458)
+local VisualTab = Window:CreateTab("Visuals 👁️", 4483362458)
+
+-- COMBAT TAB
+MainTab:CreateSection("Aimbot Settings 🎯")
+
+MainTab:CreateToggle({
+    Name = "Active Aimbot 🔫",
+    CurrentValue = false,
+    Callback = function(v) State.AimbotEnabled = v end
+})
+
+MainTab:CreateSlider({
+    Name = "Aim Strength (%) 💪",
+    Range = {1, 100}, -- 1% to 100%
+    Increment = 1,
+    Suffix = "%",
+    CurrentValue = 100, -- 100% Strength (Instant)
+    Callback = function(v) 
+        State.Sensitivity = v / 100 
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Smart Team Check 🛡️",
+    CurrentValue = true,
+    Flag = "TeamCheck",
+    Callback = function(v) State.SmartTeamCheck = v end
+})
+
+MainTab:CreateToggle({
+    Name = "Wall Check 🧱",
+    CurrentValue = true,
+    Callback = function(v) State.WallCheck = v end
+})
+
+MainTab:CreateSlider({
+    Name = "FOV Size ⭕",
+    Range = {50, 600},
+    Increment = 10,
+    CurrentValue = 150,
+    Callback = function(v) State.FOVSize = v end
+})
+
+MainTab:CreateToggle({
+    Name = "Show FOV Circle 🎨",
+    CurrentValue = false,
+    Callback = function(v) FOVCircle.Visible = v end
+})
+
+-- VISUALS TAB
+VisualTab:CreateSection("Highlights (Chams) ✨")
+VisualTab:CreateToggle({
+    Name = "Player Highlights 🌟",
+    CurrentValue = true,
+    Callback = function(v) State.HighlightESP = v end
+})
+VisualTab:CreateColorPicker({
+    Name = "Enemy Color 🔴",
+    Color = Color3.fromRGB(255, 0, 0),
+    Callback = function(c) State.EnemyColor = c end
+})
+
+VisualTab:CreateSection("2D ESP ⬛")
+VisualTab:CreateToggle({ Name = "Box ESP 📦", CurrentValue = false, Callback = function(v) State.BoxESP = v end })
+VisualTab:CreateToggle({ Name = "Name ESP 🏷️", CurrentValue = false, Callback = function(v) State.NameESP = v end })
+VisualTab:CreateToggle({ Name = "Hide Teammates 🚫", CurrentValue = true, Callback = function(v) State.ESPTeamCheck = v end })
+
+-- =========================
+-- MAIN RENDER LOOP
+-- =========================
+RunService.RenderStepped:Connect(function()
+    -- 1. FOV Update
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Radius = State.FOVSize
+    FOVCircle.Visible = State.AimbotEnabled and State.FOVSize > 0 
+
+    -- 2. Aimbot Execution
+    if State.AimbotEnabled then
+        local Target = GetTarget()
+        if Target then
+            local CurrentCF = Camera.CFrame
+            local GoalCF = CFrame.new(CurrentCF.Position, Target.Position)
+            
+            -- Instant Lock Logic (Strength 100%)
+            if State.Sensitivity >= 1 then
+                Camera.CFrame = GoalCF
+            else
+                Camera.CFrame = CurrentCF:Lerp(GoalCF, State.Sensitivity)
+            end
+        end
+    end
+
+    -- 3. Visuals & ESP
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            if char and IsValid(player) then
+                
+                local isAlly = IsTeammate(player)
+                
+                -- Highlight ESP Logic
+                if State.HighlightESP then
+                    local showHighlight = true
+                    if State.ESPTeamCheck and isAlly then showHighlight = false end
+                    
+                    if showHighlight then
+                        local hl = char:FindFirstChild("GlenxddHighlight")
+                        if not hl then
+                            hl = Instance.new("Highlight")
+                            hl.Name = "GlenxddHighlight"
+                            hl.Adornee = char
+                            hl.Parent = char
+                            hl.FillTransparency = 0.5
+                            hl.OutlineTransparency = 0
+                        end
+                        hl.FillColor = isAlly and State.TeamColor or State.EnemyColor
+                        hl.OutlineColor = Color3.new(1,1,1)
+                        hl.Enabled = true
+                    else
+                        if char:FindFirstChild("GlenxddHighlight") then
+                            char.GlenxddHighlight:Destroy()
+                        end
+                    end
+                else
+                    if char:FindFirstChild("GlenxddHighlight") then
+                        char.GlenxddHighlight:Destroy()
+                    end
+                end
+
+                -- Drawing ESP Logic
+                if not DrawingStorage[player] then
+                    DrawingStorage[player] = {
+                        Box = Drawing.new("Square"),
+                        Name = Drawing.new("Text")
+                    }
+                    DrawingStorage[player].Box.Thickness = 1
+                    DrawingStorage[player].Box.Filled = false
+                    DrawingStorage[player].Name.Center = true
+                    DrawingStorage[player].Name.Size = 14
+                    DrawingStorage[player].Name.Outline = true
+                    DrawingStorage[player].Name.Color = Color3.new(1,1,1)
+                end
+
+                local d = DrawingStorage[player]
+                local shouldDraw = (State.BoxESP or State.NameESP)
+                if State.ESPTeamCheck and isAlly then shouldDraw = false end
+
+                local HRP = char:FindFirstChild("HumanoidRootPart")
+                local Head = char:FindFirstChild("Head")
+
+                if shouldDraw and HRP and Head then
+                    local Vec, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
+                    
+                    if OnScreen then
+                        local HeadPos = Camera:WorldToViewportPoint(Head.Position + Vector3.new(0, 0.5, 0))
+                        local LegPos = Camera:WorldToViewportPoint(HRP.Position - Vector3.new(0, 3, 0))
+                        local H = LegPos.Y - HeadPos.Y
+                        local W = H / 1.5
+
+                        -- Box
+                        if State.BoxESP then
+                            d.Box.Visible = true
+                            d.Box.Size = Vector2.new(W, H)
+                            d.Box.Position = Vector2.new(Vec.X - W/2, HeadPos.Y)
+                            d.Box.Color = isAlly and State.TeamColor or State.EnemyColor
+                        else
+                            d.Box.Visible = false
+                        end
+
+                        -- Name
+                        if State.NameESP then
+                            d.Name.Visible = true
+                            d.Name.Text = player.DisplayName
+                            d.Name.Position = Vector2.new(Vec.X, HeadPos.Y - 16)
+                        else
+                            d.Name.Visible = false
+                        end
+                    else
+                        d.Box.Visible = false; d.Name.Visible = false
+                    end
+                else
+                    d.Box.Visible = false; d.Name.Visible = false
+                end
+            else
+                if DrawingStorage[player] then
+                    DrawingStorage[player].Box.Visible = false
+                    DrawingStorage[player].Name.Visible = false
+                end
+            end
+        end
+    end
+end)
+
+-- =========================
+-- CLEANUP
+-- =========================
+Players.PlayerRemoving:Connect(function(plr)
+    if DrawingStorage[plr] then
+        DrawingStorage[plr].Box:Remove()
+        DrawingStorage[plr].Name:Remove()
+        DrawingStorage[plr] = nil
+    end
+end)
+
+Rayfield:Notify({
+    Title = "Welcome glenxdd! 👑",
+    Content = "1TAPPIN MO SILAA!! 💀🔥",
+    Duration = 5
+})
